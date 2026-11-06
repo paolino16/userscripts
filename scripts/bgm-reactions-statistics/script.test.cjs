@@ -12,7 +12,7 @@ function harness(pages) {
     GM_xmlhttpRequest: opts => { const page=pages[calls++]; opts.onload({status:200,responseText:JSON.stringify(page)}); }
   };
   context.window = context; vm.createContext(context);
-  vm.runInContext(source.replace(/\}\)\(\);\s*$/, 'globalThis.api = {fetchTimelineData, escapeHTML, processTimelineData};})();'),context);
+  vm.runInContext(source.replace(/\}\)\(\);\s*$/, 'globalThis.api = {fetchTimelineData, escapeHTML, processTimelineData, sortReactionItems, recordObservedReactions};})();'),context);
   return {api:context.api,calls:()=>calls};
 }
 test('empty page terminates immediately', async()=>{
@@ -38,4 +38,23 @@ test('missing reaction users does not crash',()=>{
   assert.equal(r[0].total_reaction_users,0);
 });
 
+
+test('sort modes, ties and unknown observation times',()=>{
+ const api=harness([]).api;
+ const items=[{timeline_id:1,created_at:10,total_reaction_users:8},{timeline_id:2,created_at:30,total_reaction_users:2,last_reaction_observed_at:100},{timeline_id:3,created_at:20,total_reaction_users:8,last_reaction_observed_at:200}];
+ for(const [mode,expected] of Object.entries({likes_desc:[3,1,2],likes_asc:[2,3,1],published_desc:[2,3,1],published_asc:[1,3,2],observed_desc:[3,2,1],observed_asc:[2,3,1]})) {
+ assert.equal(JSON.stringify(api.sortReactionItems(items,mode).map(x=>x.timeline_id)),JSON.stringify(expected));
+ }
+ assert.equal(items[0].timeline_id,1);
+});
+test('observation only advances for added reactions after baseline',()=>{
+ const api=harness([]).api;
+ const item={timeline_id:1,reactions:[{value:0,users:[{id:1}]}]};
+ assert.equal(api.recordObservedReactions([], [item], false,100)[0].last_reaction_observed_at,0);
+ const old={...item,last_reaction_observed_at:50};
+ assert.equal(api.recordObservedReactions([old],[item],true,100)[0].last_reaction_observed_at,50);
+ const added={...item,reactions:[{value:0,users:[{id:1},{id:2}]}]};
+ assert.equal(api.recordObservedReactions([old],[added],true,100)[0].last_reaction_observed_at,100);
+ assert.equal(api.recordObservedReactions([old],[{...item,reactions:[]}],true,100)[0].last_reaction_observed_at,50);
+});
 

@@ -3,7 +3,7 @@
 // @description  BGM时间线点赞统计 - 自动获取并展示被点赞内容 (修复死循环 + 兼容chii.in)
 // @license      MIT
 // @namespace    sqrtwo
-// @version      4.4.0
+// @version      4.5.0
 // @author       徒手开根号二 (重构版 + 死循环修复 + chii.in兼容)
 // @match        https://bgm.tv/*
 // @match        https://bangumi.tv/*
@@ -484,6 +484,41 @@
         });
     }
 
+    const SORT_KEY = 'BGM_REACTIONS_SORT';
+    const SORT_OPTIONS = {
+        published_desc: '发布时间：最新优先', published_asc: '发布时间：最早优先',
+        likes_desc: '点赞数量：从多到少', likes_asc: '点赞数量：从少到多',
+        observed_desc: '检测到新增点赞：最近优先', observed_asc: '检测到新增点赞：最早优先'
+    };
+    let selectedSort = 'published_desc';
+    try { const saved = localStorage.getItem(SORT_KEY); if (Object.hasOwn(SORT_OPTIONS, saved)) selectedSort = saved; } catch {}
+    function sortReactionItems(items, mode = selectedSort) {
+        const number = value => Number.isFinite(Number(value)) ? Number(value) : 0;
+        const tie = (a, b) => number(b.created_at) - number(a.created_at) || number(b.timeline_id) - number(a.timeline_id);
+        return [...items].sort((a, b) => {
+            if (mode.startsWith('observed_')) {
+                const x = number(a.last_reaction_observed_at), y = number(b.last_reaction_observed_at);
+                if (!x || !y) return x ? -1 : y ? 1 : tie(a, b);
+                return (mode.endsWith('_asc') ? x - y : y - x) || tie(a, b);
+            }
+            const key = mode.startsWith('likes_') ? 'total_reaction_users' : 'created_at';
+            const delta = number(a[key]) - number(b[key]);
+            return (mode.endsWith('_asc') ? delta : -delta) || tie(a, b);
+        });
+    }
+    function reactionKeys(item) {
+        return new Set((item.reactions || []).flatMap(r => (r.users || []).map(u => `${r.value}:${u.id || u.username}`)));
+    }
+    function recordObservedReactions(previous, next, hasBaseline, now = Math.floor(Date.now() / 1000)) {
+        const byId = new Map(previous.map(item => [item.timeline_id, item]));
+        return next.map(item => {
+            const prev = byId.get(item.timeline_id);
+            const oldKeys = reactionKeys(prev || {});
+            const added = hasBaseline && [...reactionKeys(item)].some(key => !oldKeys.has(key));
+            return {...item, last_reaction_observed_at: added ? now : (prev?.last_reaction_observed_at || 0)};
+        });
+    }
+
     // 获取表情符号
     function getReactionEmoji(value) {
         return REACTION_EMOJI_MAP[value] || `[表情${value}]`;
@@ -767,7 +802,7 @@
             const result = await fetchTimelineData(userInfo.username, { full: !!forceFull, totalPages: Number(totalPages) || 0 }, onProgress);
             const existing = getFromLocalStorage();
             const prev = existing?.reactions_data || [];
-            const next = result.reactions || [];
+            const next = recordObservedReactions(prev, result.reactions || [], !!existing?.last_update);
             const fetchedIds = new Set(result.allIds);
             const retained = forceFull && result.complete ? [] : prev.filter(item => !fetchedIds.has(item.timeline_id));
             const merged = mergeReactionItems([...retained, ...next]);
@@ -845,6 +880,13 @@
                         ${localData ? `最后更新: ${new Date(localData.last_update).toLocaleString()}` : '暂无数据'}
                     </div>
                 </div>
+                <div style="margin:12px 0">
+                    <label for="reaction_sort">排序：</label>
+                    <select id="reaction_sort" class="reaction_text_input">
+                        ${Object.entries(SORT_OPTIONS).map(([key, label]) => `<option value="${key}" ${selectedSort === key ? 'selected' : ''}>${label}</option>`).join('')}
+                    </select>
+                    <p style="color:#888;font-size:12px">检测时间不等于实际点赞时间；历史未知时间排在最后，旧内容需全量刷新才能检测变化。</p>
+                </div>
                 <div id="reaction_content">
                     <div class="loading_container">
                         <div class="loading_spinner"></div>
@@ -854,6 +896,12 @@
             </div>
         `);
 
+        $('#reaction_sort').on('change', function() {
+            if (!Object.hasOwn(SORT_OPTIONS, this.value)) return;
+            selectedSort = this.value;
+            try { localStorage.setItem(SORT_KEY, selectedSort); } catch {}
+            if (!updateRunning) renderReactionContent();
+        });
         // 绑定标签切换事件
         $('#reaction_tabs a').on('click', function() {
             const tabType = $(this).data('tab');
@@ -915,9 +963,7 @@
             return;
         }
 
-        const reactionsData = localData.reactions_data;
-
-        reactionsData.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+        const reactionsData = sortReactionItems(localData.reactions_data);
 
         let html = '';
 
@@ -953,7 +999,8 @@
                             <div class="meta_info">
                                 评分: ${escapeHTML(item.rate || '无')} |
                                 创建时间: ${formatTimestamp(item.created_at)} |
-                                点赞数: ${Number(item.total_reaction_users) || 0}
+                                点赞数: ${Number(item.total_reaction_users) || 0}<br>
+                                最近检测到新增点赞: ${item.last_reaction_observed_at ? formatTimestamp(item.last_reaction_observed_at) : '未知（历史数据）'}
                             </div>
                         </div>
                     </div>
