@@ -3,7 +3,9 @@
 // @description  BGM时间线点赞统计 - 自动获取并展示被点赞内容 (修复死循环 + 兼容chii.in)
 // @license      MIT
 // @namespace    sqrtwo
-// @version      4.5.0
+// @version      4.5.1
+// @updateURL    https://raw.githubusercontent.com/paolino16/userscripts/main/scripts/bgm-reactions-statistics/bgm-reactions-statistics.user.js
+// @downloadURL  https://raw.githubusercontent.com/paolino16/userscripts/main/scripts/bgm-reactions-statistics/bgm-reactions-statistics.user.js
 // @author       徒手开根号二 (重构版 + 死循环修复 + chii.in兼容)
 // @match        https://bgm.tv/*
 // @match        https://bangumi.tv/*
