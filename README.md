@@ -1,8 +1,8 @@
-# 私有油猴脚本合集
+# 油猴脚本合集
 
 集中保存个人使用的 Tampermonkey 脚本与修改历史。目前收录一个脚本，其余待从 Tampermonkey 导出后加入。
 
-## bgm_reactions_statistics 4.4.0
+## bgm_reactions_statistics 4.5.1
 
 位置：`scripts/bgm-reactions-statistics/bgm-reactions-statistics.user.js`。
 保留原作者徒手开根号二、namespace sqrtwo 与原 MIT 声明。
@@ -11,7 +11,7 @@
 
 ### 安装与更新
 
-登录 GitHub 后打开脚本文件，复制完整内容到 Tampermonkey 对应脚本编辑器并保存。私有仓库用于版本跟踪，不配置带令牌的自动更新 URL。浏览器中的已安装版本尚未由本次操作替换。
+仓库已公开。打开 [安装或更新脚本](https://raw.githubusercontent.com/paolino16/userscripts/main/scripts/bgm-reactions-statistics/bgm-reactions-statistics.user.js)，在 Tampermonkey 中确认安装或更新。4.5.1 已配置 @updateURL 与 @downloadURL；旧版本需先手动更新一次，之后由 Tampermonkey 按其更新设置检查后续版本。浏览器中的已安装版本尚未由本次操作替换。
 
 ### 4.4.0 修复
 
