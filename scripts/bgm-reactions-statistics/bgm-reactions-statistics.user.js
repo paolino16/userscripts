@@ -3,7 +3,7 @@
 // @description  BGM时间线点赞统计 - 自动获取并展示被点赞内容 (修复死循环 + 兼容chii.in)
 // @license      MIT
 // @namespace    sqrtwo
-// @version      4.3
+// @version      4.4.0
 // @author       徒手开根号二 (重构版 + 死循环修复 + chii.in兼容)
 // @match        https://bgm.tv/*
 // @match        https://bangumi.tv/*
@@ -48,6 +48,7 @@
         140: "https://bgm.tv/img/smiles/tv/101.gif"
     };
     let CANCEL_UPDATE = false;
+    let updateRunning = false;
 
     // ====================== 兼容性处理 - 核心修复 ======================
     function getGMHttpRequest() {
@@ -67,7 +68,7 @@
         }
         // 2. 兼容Promise版GM.xmlHttpRequest（Violentmonkey）
         else if (typeof GM !== 'undefined' && typeof GM.xmlHttpRequest !== 'undefined') {
-            return GM.xmlHttpRequest;
+            return options => GM.xmlHttpRequest(options);
         }
         // 3. 降级方案：普通fetch（仅兜底，可能有CORS）
         else {
@@ -76,7 +77,7 @@
                     method: options.method || 'GET',
                     headers: options.headers || {},
                     mode: 'cors',
-                    timeout: options.timeout || 10000
+                    signal: AbortSignal.timeout(options.timeout || 10000)
                 }).then(response => {
                     if (!response.ok) throw new Error(`HTTP ${response.status}`);
                     return {
@@ -409,7 +410,8 @@
                             document.querySelector('#dock li.first a')?.getAttribute('href');
             if (!userLink) return null;
 
-            const uid = userLink.split('/user/')[1];
+            const uid = new URL(userLink, location.origin).pathname.match(/^\/user\/([^/]+)/)?.[1];
+            if (!uid) return null;
             const username = uid; // BGM的username通常等于uid
 
             // 获取用户昵称
@@ -492,13 +494,19 @@
             return `<img class="reaction_smile" src="${url}" alt="${value}">`;
         }
         const e = getReactionEmoji(value);
-        return `<span class="reaction_emoji">${e}</span>`;
+        return `<span class="reaction_emoji">${escapeHTML(e)}</span>`;
     }
 
     // ====================== 本地存储操作 ======================
     // 初始化本地存储
     function initLocalStorage() {
-        let data = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}');
+        let data;
+        try {
+            data = JSON.parse(localStorage.getItem(LOCAL_STORAGE_KEY) || '{}');
+            if (!data || typeof data !== 'object' || Array.isArray(data)) throw new Error('缓存格式无效');
+        } catch {
+            throw new Error('本地缓存损坏，请备份 BGM_REACTIONS_DATA 后再清理缓存');
+        }
         const userInfo = getUserInfo();
 
         if (!userInfo || !userInfo.uid) return data;
@@ -556,6 +564,8 @@
         let until = null;
         let pageCount = 0;
         let consecutiveEmpty = 0;
+        const seenIds = new Set();
+        let complete = false;
         const existing = getFromLocalStorage();
         const lastMaxIdSeen = existing?.last_max_id_seen || 0;
         const fullRefresh = !!opts.full;
@@ -569,7 +579,7 @@
             }
             if (CANCEL_UPDATE) {
                 console.log(`收到停止指令，终止请求`);
-                break;
+                throw new Error('更新已停止，原缓存保持不变');
             }
             // 安全终止条件1：超过最大请求页数
             if (pageCount >= MAX_REQUEST_PAGES) {
@@ -589,7 +599,7 @@
             }
 
             pageCount++;
-            let url = `${API_BASE_URL}${username}/timeline?limit=${FETCH_LIMIT}`;
+            let url = `${API_BASE_URL}${encodeURIComponent(username)}/timeline?limit=${FETCH_LIMIT}`;
             if (until) url += `&until=${until}`;
 
             console.log(`请求API[第${pageCount}页]: ${url}`);
@@ -620,19 +630,22 @@
 
                 console.log(`[第${pageCount}页] 返回数据量: ${Array.isArray(timelineData) ? timelineData.length : '非数组'}`);
 
-                // 处理空数据
-                if (!Array.isArray(timelineData) || timelineData.length === 0) {
-                    consecutiveEmpty++;
-                    console.log(`第${pageCount}页返回空数据，连续空页数: ${consecutiveEmpty}`);
-                    continue;
+                if (CANCEL_UPDATE) throw new Error('更新已停止，原缓存保持不变');
+                if (!Array.isArray(timelineData)) throw new Error('API 返回格式异常');
+                if (timelineData.length === 0) { complete = true; break; }
+                if (timelineData.some(item => !Number.isSafeInteger(item.id) || item.id <= 0)) {
+                    throw new Error('API 返回无效时间线 ID');
                 }
-
-                // 重置空页计数器
+                const nextCursor = Math.min(...timelineData.map(item => item.id));
+                if ((until !== null && nextCursor >= until) || timelineData.every(item => seenIds.has(item.id))) {
+                    throw new Error('API 分页未前进，已停止以避免重复请求');
+                }
+                timelineData.forEach(item => seenIds.add(item.id));
                 consecutiveEmpty = 0;
 
                 // 收集数据和ID
                 const currentIds = timelineData.map(item => item.id);
-                allData.push(...timelineData);
+                allData.push(...timelineData.filter(item => !allIds.includes(item.id)));
                 allIds.push(...currentIds);
                 if (ENABLE_INCREMENTAL && !fullRefresh && lastMaxIdSeen) {
                     if (timelineData.some(x => x.id <= lastMaxIdSeen)) {
@@ -643,11 +656,13 @@
                 // 判断是否有更多数据
                 if (timelineData.length < FETCH_LIMIT) {
                     console.log(`第${pageCount}页数据不足${FETCH_LIMIT}条，已到最后一页`);
+                    complete = true;
                     break;
                 }
 
                 // 更新until，准备下一页请求
-                until = timelineData[timelineData.length - 1].id;
+                until = nextCursor;
+                if (onProgress) onProgress(pageCount);
 
                 if (cutoffReached) {
                     if (ENABLE_BACKFILL && backfillPages < BACKFILL_PAGES) {
@@ -659,20 +674,19 @@
                 }
 
                 // 延迟避免请求过快
-                await new Promise(resolve => setTimeout(resolve, 50));
+                await new Promise(resolve => setTimeout(resolve, 250));
 
             } catch (error) {
                 console.error(`[第${pageCount}页] 请求/解析报错:`, error);
                 // 遇到错误不终止，继续尝试下一页（可根据需要调整）
-                consecutiveEmpty++;
-                continue;
+                throw error;
             }
         }
 
         // 处理所有数据，提取点赞信息
         const reactionsData = processTimelineData(allData);
         const maxId = allIds.length > 0 ? Math.max(...allIds) : 0;
-        return { reactions: reactionsData, allIds: allIds, lastMaxIdSeen: maxId };
+        return { reactions: reactionsData, allIds: allIds, lastMaxIdSeen: maxId, complete };
     }
 
     // 处理timeline数据，提取点赞信息（仅保留cat=3类型）
@@ -682,7 +696,7 @@
 
         timelineData.forEach(item => {
             // 只处理cat=3（评论类）且非批量且有reactions的条目
-            if (item.cat === 3 && item.batch === false && item.reactions && item.reactions.length > 0) {
+            if (item.cat === 3 && item.batch === false && Array.isArray(item.reactions) && item.reactions.length > 0) {
                 let comment = "";
                 let subject = null;
                 let rate = 0;
@@ -710,13 +724,13 @@
                     reactions: item.reactions.map(reaction => ({
                         value: reaction.value,
                         emoji: getReactionEmoji(reaction.value),
-                        users: reaction.users.map(user => ({
+                        users: (Array.isArray(reaction.users) ? reaction.users : []).map(user => ({
                             id: user.id,
                             username: user.username,
                             nickname: user.nickname || `用户${user.id}`
                         }))
                     })),
-                    total_reaction_users: item.reactions.reduce((total, r) => total + r.users.length, 0)
+                    total_reaction_users: item.reactions.reduce((total, r) => total + (Array.isArray(r.users) ? r.users.length : 0), 0)
                 };
 
                 reactionsData.push(reactionInfo);
@@ -735,6 +749,8 @@
             return [];
         }
 
+        if (updateRunning) return [];
+        updateRunning = true;
         try {
             CANCEL_UPDATE = false;
             console.log(`开始获取 ${userInfo.username} 的时间线数据...`);
@@ -752,7 +768,9 @@
             const existing = getFromLocalStorage();
             const prev = existing?.reactions_data || [];
             const next = result.reactions || [];
-            const merged = mergeReactionItems([...prev, ...next]);
+            const fetchedIds = new Set(result.allIds);
+            const retained = forceFull && result.complete ? [] : prev.filter(item => !fetchedIds.has(item.timeline_id));
+            const merged = mergeReactionItems([...retained, ...next]);
 
             // 保存到本地存储
             saveToLocalStorage(merged, result.allIds, result.lastMaxIdSeen);
@@ -770,7 +788,7 @@
             if (contentContainer) {
                 contentContainer.innerHTML = `
                     <div class="error_message">
-                        获取数据失败: ${error}<br>
+                        获取数据失败: ${escapeHTML(error.message || error)}<br>
                         请检查：<br>
                         1. 油猴插件是否启用<br>
                         2. 脚本是否有跨域请求权限<br>
@@ -779,6 +797,8 @@
                 `;
             }
             return [];
+        } finally {
+            updateRunning = false;
         }
     }
 
@@ -810,7 +830,7 @@
 
         // 加载中状态
         tmlContent.html(`
-            <div class="reaction_stat_container">
+            <div id="reaction_stat_container" class="reaction_stat_container">
                 <div id="reaction_tabs">
                     <a href="javascript:;" class="active" data-tab="all">所有点赞</a>
                     <a href="javascript:;" data-tab="refresh">刷新数据</a>
@@ -841,7 +861,7 @@
             $(this).addClass('active');
 
             if (tabType === 'refresh') {
-                CANCEL_UPDATE = false;
+                if (updateRunning) return;
                 $('#reaction_content').html(`
                     <div class="loading_container">
                         <div class="loading_spinner"></div>
@@ -860,17 +880,7 @@
                 `);
                 $('#reaction_start_full').on('click', function() {
                     const totalPagesVal = Number($('#reaction_total_pages').val()) || 0;
-                    updateReactionsData(true, totalPagesVal).then(() => {
-                        // 拉取完成后将进度条填满
-                        const progress = document.getElementById('reaction_progress');
-                        if (progress) {
-                            const fill = progress.querySelector('.progress_fill');
-                            const text = progress.querySelector('.progress_text');
-                            if (fill) fill.style.width = '100%';
-                            if (text) text.textContent = '已完成';
-                        }
-                        renderReactionContent('all');
-                    });
+                    updateReactionsData(true, totalPagesVal);
                 });
             } else if (tabType === 'stop') {
                 CANCEL_UPDATE = true;
@@ -917,7 +927,7 @@
             let reactionsHtml = '';
             item.reactions.forEach(reaction => {
                 const icon = getReactionIconHTML(reaction.value);
-                const usersHtml = reaction.users.map(user => `<a href="${window.location.origin}/user/${user.username}" target="_blank">${user.nickname}</a>`).join('、');
+                const usersHtml = (Array.isArray(reaction.users) ? reaction.users : []).map(user => `<a href="${window.location.origin}/user/${encodeURIComponent(user.username || user.id)}" target="_blank" rel="noopener noreferrer">${escapeHTML(user.nickname)}</a>`).join('、');
                 reactionsHtml += `
                     <div class="reaction_group">
                         <span class="reaction_icon">${icon}</span>
@@ -935,15 +945,15 @@
                     <div class="header">
                         <div class="subject_info">
                             <div class="subject_title">
-                                <a href="${window.location.origin}/subject/${item.subject.id}" target="_blank">
-                                    ${item.subject.nameCN || item.subject.name}
+                                <a href="${window.location.origin}/subject/${encodeURIComponent(item.subject.id)}" target="_blank" rel="noopener noreferrer">
+                                    ${escapeHTML(item.subject.nameCN || item.subject.name)}
                                 </a>
                             </div>
                             ${subtitle}
                             <div class="meta_info">
-                                评分: ${item.rate || '无'} |
+                                评分: ${escapeHTML(item.rate || '无')} |
                                 创建时间: ${formatTimestamp(item.created_at)} |
-                                点赞数: ${item.total_reaction_users}
+                                点赞数: ${Number(item.total_reaction_users) || 0}
                             </div>
                         </div>
                     </div>
@@ -989,6 +999,7 @@
             return;
         }
 
+        if (!location.pathname.includes('/timeline') || !getUserInfo()) return;
         // 初始化本地存储
         initLocalStorage();
 
@@ -1015,3 +1026,4 @@
     });
 
 })();
+
