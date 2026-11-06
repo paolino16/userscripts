@@ -3,7 +3,7 @@
 // @description  BGM时间线点赞统计 - 自动获取并展示被点赞内容 (修复死循环 + 兼容chii.in)
 // @license      MIT
 // @namespace    sqrtwo
-// @version      4.6.0
+// @version      4.6.1
 // @updateURL    https://raw.githubusercontent.com/paolino16/userscripts/main/scripts/bgm-reactions-statistics/bgm-reactions-statistics.user.js
 // @downloadURL  https://raw.githubusercontent.com/paolino16/userscripts/main/scripts/bgm-reactions-statistics/bgm-reactions-statistics.user.js
 // @author       徒手开根号二 (重构版 + 死循环修复 + chii.in兼容)
@@ -112,6 +112,8 @@
             }
             #reaction_tabs {
                 display: flex;
+                align-items: center;
+                flex-wrap: wrap;
                 gap: 8px;
                 margin-bottom: 12px;
                 border-bottom: 1px solid #e8e8e8;
@@ -398,50 +400,6 @@
             .reaction_item .reaction_icon img { width: 18px; height: 18px; display: block; }
             .reaction_item .reaction_users { display: inline-flex; align-items: center; flex-wrap: wrap; gap: 0 4px; }
             .reaction_item .reaction_users a { margin-right: 0; }
-
-            #reaction_stat_container { --rs-text:#333; --rs-muted:#666; --rs-line:#ddd; --rs-bg:#fff; --rs-soft:#f6f6f6; --rs-accent:#a92b60; margin:16px 0; padding:0 0 24px; color:var(--rs-text); }
-            html[data-theme='dark'] #reaction_stat_container { --rs-text:#eee; --rs-muted:#b7b7b7; --rs-line:#555; --rs-bg:#303030; --rs-soft:#383838; --rs-accent:#f3a1c3; }
-            #reaction_stat_container [hidden] { display:none !important; }
-            #reaction_stat_container .reaction_heading { display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between; gap:8px 16px; margin-bottom:16px; }
-            #reaction_stat_container h2 { margin:0; font-size:18px; line-height:1.5; color:var(--rs-text); }
-            #reaction_stat_container .update_time { margin:0; color:var(--rs-muted); font-size:12px; }
-            #reaction_stat_container .reaction_toolbar { display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between; gap:12px 24px; padding:12px 0; border-block:1px solid var(--rs-line); }
-            #reaction_stat_container .reaction_summary { gap:16px; color:var(--rs-muted); }
-            #reaction_stat_container .reaction_summary strong { color:var(--rs-text); font-size:14px; font-variant-numeric:tabular-nums; }
-            #reaction_stat_container .reaction_controls, #reaction_stat_container .reaction_full_controls { display:flex; align-items:center; flex-wrap:wrap; gap:8px; font-size:12px; }
-            #reaction_stat_container select, #reaction_stat_container input, #reaction_stat_container .reaction_btn { box-sizing:border-box; min-height:36px; max-width:100%; margin:0; padding:6px 10px; border:1px solid var(--rs-line); border-radius:4px; background:var(--rs-bg); color:var(--rs-text); font:inherit; }
-            #reaction_stat_container input { width:164px; }
-            #reaction_stat_container input::placeholder { color:var(--rs-muted); }
-            #reaction_stat_container .reaction_primary { color:var(--rs-accent); border-color:var(--rs-accent); font-weight:600; }
-            #reaction_stat_container button:hover { background:var(--rs-soft); }
-            #reaction_stat_container button:disabled { opacity:.6; cursor:wait; }
-            #reaction_stat_container :focus-visible { outline:2px solid var(--rs-accent); outline-offset:3px; }
-            #reaction_stat_container ::selection { background:#f4c8dc; color:#292129; }
-            #reaction_stat_container .reaction_hint, #reaction_stat_container .reaction_advanced p { margin:8px 0; color:var(--rs-muted); font-size:12px; line-height:1.7; }
-            #reaction_stat_container .reaction_advanced { margin:8px 0 16px; color:var(--rs-muted); font-size:12px; }
-            #reaction_stat_container summary { cursor:pointer; width:fit-content; padding:8px 0; }
-            #reaction_stat_container .reaction_advanced_body { padding:0 0 12px; }
-            #reaction_stat_container .reaction_item { border:0; border-bottom:1px solid var(--rs-line); border-radius:0; box-shadow:none; background:none; padding:20px 0; margin:0; overflow-wrap:anywhere; }
-            #reaction_stat_container .reaction_item .header { border:0; padding:0; margin:0 0 8px; }
-            #reaction_stat_container .subject_title { font-size:15px; line-height:1.6; }
-            #reaction_stat_container .subject_title a { color:var(--rs-text); }
-            #reaction_stat_container .meta_info, #reaction_stat_container .subject_subtitle { color:var(--rs-muted); font-size:12px; }
-            #reaction_stat_container .comment_content { padding:0; border:0; background:none; line-height:1.8; margin:12px 0; }
-            #reaction_stat_container .reactions_list { border:0; padding:0; margin:12px 0 0; }
-            #reaction_stat_container .reaction_users a { color:var(--rs-accent); text-underline-offset:3px; }
-            #reaction_stat_container .reaction_list_title { color:var(--rs-muted); }
-            #reaction_stat_container .progress_bar { height:4px; background:var(--rs-soft); }
-            #reaction_stat_container .progress_fill { background:var(--rs-accent); }
-            #reaction_stat_container .progress_text { color:var(--rs-muted); text-align:left; }
-            #reaction_status:not(:empty) { padding:12px 0; }
-            @media (max-width:600px) {
-                #reaction_stat_container .reaction_controls { width:100%; }
-                #reaction_stat_container select { flex:1; min-width:0; width:140px; }
-                #reaction_stat_container .reaction_full_controls { align-items:flex-start; }
-                #reaction_stat_container .reaction_heading { display:block; }
-                #reaction_stat_container .update_time { display:block; margin-top:4px; text-align:left; }
-            }
-            @media (prefers-reduced-motion:reduce) { #reaction_stat_container * { animation:none; transition:none; } }
         `;
         document.head.appendChild(style);
     }
@@ -832,11 +790,6 @@
 
         if (updateRunning) return [];
         updateRunning = true;
-        syncUpdateControls();
-        $('#reaction_stop').prop('disabled', false);
-        $('#reaction_status').text('');
-        $('#reaction_progress').prop('hidden', false);
-        $('#reaction_progress .progress_text').text('正在请求时间线…');
         try {
             CANCEL_UPDATE = false;
             console.log(`开始获取 ${userInfo.username} 的时间线数据...`);
@@ -870,7 +823,7 @@
         } catch (error) {
             console.error("更新点赞数据失败:", error);
             // 显示友好的错误提示
-            const contentContainer = document.getElementById('reaction_status');
+            const contentContainer = document.getElementById('reaction_content');
             if (contentContainer) {
                 contentContainer.innerHTML = `
                     <div class="error_message">
@@ -885,8 +838,6 @@
             return [];
         } finally {
             updateRunning = false;
-            $('#reaction_progress').prop('hidden', true);
-            syncUpdateControls();
         }
     }
 
@@ -909,71 +860,94 @@
         });
     }
 
-    function syncUpdateControls() {
-        $('#reaction_refresh, #reaction_start_full, #reaction_total_pages').prop('disabled', updateRunning);
-        $('#reaction_stop').prop('hidden', !updateRunning);
-        $('#reaction_refresh').text(updateRunning ? '更新中…' : '刷新');
-    }
+    // 渲染点赞统计页面
     function renderReactionsPage() {
+        const tmlContent = $('#tmlContent');
         const localData = getFromLocalStorage();
-        const items = localData?.reactions_data || [];
-        $('#tmlContent').html(`
+        const totalItems = localData?.reactions_data?.length || 0;
+        const totalLikes = (localData?.reactions_data || []).reduce((sum, item) => sum + (item.total_reaction_users || 0), 0);
+
+        // 加载中状态
+        tmlContent.html(`
             <div id="reaction_stat_container" class="reaction_stat_container">
-                <header class="reaction_heading">
-                    <h2>收到的点赞</h2>
-                    <span class="update_time">${localData?.last_update ? `更新于 ${new Date(localData.last_update).toLocaleString()}` : '尚未更新'}</span>
-                </header>
-                <div class="reaction_toolbar">
-                    <div class="reaction_summary"><span><strong>${items.length}</strong> 条记录</span><span><strong>${items.reduce((sum, item) => sum + (Number(item.total_reaction_users) || 0), 0)}</strong> 个赞</span></div>
-                    <div class="reaction_controls">
-                        <label for="reaction_sort">排序</label>
-                        <select id="reaction_sort" aria-describedby="reaction_sort_hint">
-                            ${Object.entries(SORT_OPTIONS).map(([key, label]) => `<option value="${key}" ${selectedSort === key ? 'selected' : ''}>${label}</option>`).join('')}
-                        </select>
-                        <button type="button" id="reaction_refresh" class="reaction_btn reaction_primary">刷新</button>
-                        <button type="button" id="reaction_stop" class="reaction_btn" hidden>停止</button>
+                <div id="reaction_tabs">
+                    <a href="javascript:;" class="active" data-tab="all">所有点赞</a>
+                    <a href="javascript:;" data-tab="refresh">刷新数据</a>
+                    <a href="javascript:;" data-tab="stop">停止更新</a>
+                    <label for="reaction_sort">排序：</label>
+                    <select id="reaction_sort" class="reaction_text_input">
+                        ${Object.entries(SORT_OPTIONS).map(([key, label]) => `<option value="${key}" ${selectedSort === key ? 'selected' : ''}>${label}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="reaction_overview">
+                    <div class="reaction_summary">
+                        <span><strong>${totalItems}</strong> 条记录</span>
+                        <span><strong>${totalLikes}</strong> 个赞</span>
+                    </div>
+                    <div class="update_time">
+                        ${localData ? `最后更新: ${new Date(localData.last_update).toLocaleString()}` : '暂无数据'}
                     </div>
                 </div>
-                <p id="reaction_sort_hint" class="reaction_hint" ${selectedSort.startsWith('observed_') ? '' : 'hidden'}>按刷新时发现新增点赞的时间排序，并非实际点赞时间；历史未知时间排在最后。</p>
-                <details class="reaction_advanced">
-                    <summary>全量更新</summary>
-                    <div class="reaction_advanced_body">
-                        <p>较早记录的点赞变化需要全量扫描。留空最多扫描 100 页。</p>
-                        <div class="reaction_full_controls">
-                            <label for="reaction_total_pages">扫描页数</label>
-                            <input id="reaction_total_pages" type="number" min="1" max="100" step="1" placeholder="自动（最多 100）">
-                            <button type="button" id="reaction_start_full" class="reaction_btn">开始全量更新</button>
-                        </div>
-                    </div>
-                </details>
-                <div id="reaction_progress" role="status" aria-live="polite" hidden>
-                    <div class="progress_bar"><div class="progress_fill"></div></div>
-                    <div class="progress_text"></div>
+                <div style="margin:12px 0">
+                    <p style="color:#888;font-size:12px">检测时间不等于实际点赞时间；历史未知时间排在最后，旧内容需全量刷新才能检测变化。</p>
                 </div>
-                <div id="reaction_status" role="status" aria-live="polite"></div>
-                <div id="reaction_content"></div>
+                <div id="reaction_content">
+                    <div class="loading_container">
+                        <div class="loading_spinner"></div>
+                        <p>加载中...</p>
+                    </div>
+                </div>
             </div>
         `);
+
         $('#reaction_sort').on('change', function() {
             if (!Object.hasOwn(SORT_OPTIONS, this.value)) return;
             selectedSort = this.value;
             try { localStorage.setItem(SORT_KEY, selectedSort); } catch {}
-            $('#reaction_sort_hint').prop('hidden', !selectedSort.startsWith('observed_'));
-            renderReactionContent();
+            if (!updateRunning) renderReactionContent();
         });
-        $('#reaction_refresh').on('click', () => updateReactionsData());
-        $('#reaction_start_full').on('click', () => {
-            const input = document.getElementById('reaction_total_pages');
-            if (!input.reportValidity()) return;
-            updateReactionsData(true, Number(input.value) || 0);
+        // 绑定标签切换事件
+        $('#reaction_tabs a').on('click', function() {
+            const tabType = $(this).data('tab');
+            $('#reaction_tabs a').removeClass('active');
+            $(this).addClass('active');
+
+            if (tabType === 'refresh') {
+                if (updateRunning) return;
+                $('#reaction_content').html(`
+                    <div class="loading_container">
+                        <div class="loading_spinner"></div>
+                        <p>正在获取最新数据（可在下方输入总页数以确定进度）...</p>
+                        <div class="reaction_action_bar">
+                            <input id="reaction_total_pages" class="reaction_text_input" type="number" min="1" step="1" placeholder="输入全量页数，如 20">
+                            <button id="reaction_start_full" class="reaction_btn">开始</button>
+                        </div>
+                        <div class="progress_container" id="reaction_progress">
+                            <div class="progress_bar">
+                                <div class="progress_fill" style="width:0%"></div>
+                            </div>
+                            <div class="progress_text">已加载第 0 页</div>
+                        </div>
+                    </div>
+                `);
+                $('#reaction_start_full').on('click', function() {
+                    const totalPagesVal = Number($('#reaction_total_pages').val()) || 0;
+                    updateReactionsData(true, totalPagesVal);
+                });
+            } else if (tabType === 'stop') {
+                CANCEL_UPDATE = true;
+                $('#reaction_content').html(`
+                    <div class="no_data">
+                        已停止继续请求
+                    </div>
+                `);
+            } else {
+                renderReactionContent(tabType);
+            }
         });
-        $('#reaction_stop').on('click', () => {
-            CANCEL_UPDATE = true;
-            $('#reaction_status').text('正在停止，当前请求结束后保留原有数据。');
-            $('#reaction_stop').prop('disabled', true);
-        });
-        renderReactionContent();
-        syncUpdateControls();
+
+        // 初始渲染内容
+        renderReactionContent('all');
     }
 
     // 渲染点赞内容
@@ -985,7 +959,7 @@
             contentContainer.html(`
                 <div class="no_data">
                     暂无点赞数据<br>
-                    <button class="reaction_btn" style="margin-top:10px;" onclick="document.getElementById('reaction_refresh').click()">
+                    <button class="reaction_btn" style="margin-top:10px;" onclick="document.querySelector('[data-tab=refresh]').click()">
                         点击获取最新数据
                     </button>
                 </div>
@@ -1103,6 +1077,4 @@
     });
 
 })();
-
-
 
